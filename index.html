@@ -1,0 +1,177 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Trading Dashboard</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/5.15.3/css/all.min.css">
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+</head>
+<body class="bg-gray-800 text-white">
+<div class="container mx-auto p-4">
+    <!-- Main Content -->
+    <div class="flex flex-col md:flex-row mt-4 space-y-4 md:space-y-0 md:space-x-4">
+        <!-- Chart Column -->
+        <div class="flex-grow p-4 border-r border-gray-700 md:w-2/3">
+            <canvas id="tradingChart" class="w-full" height="400"></canvas>
+            <!-- Balance and Deal Display -->
+            <div id="balanceDisplay" class="mt-2">
+                Balance: <span id="balanceAmount">$10,000</span>
+            </div>
+            <div id="dealDisplay" class="mt-2 hidden">
+                <p>Deal Type: <span id="dealType"></span></p>
+                <p>Entry Price: <span id="entryPrice"></span></p>
+                <p>Shares: <span id="dealShares"></span></p>
+                <p>Position Value: <span id="positionValue"></span></p>
+            </div>
+        </div>
+
+        <!-- Trading Actions -->
+        <div class="w-full md:w-1/3 p-4">
+            <div class="border-b border-gray-700 pb-2 mb-2">
+                <h2 class="text-lg">Trade Actions</h2>
+                <div class="mt-4">
+                    <label for="shareVolume" class="block text-sm">Shares:</label>
+                    <input type="number" id="shareVolume" value="100" step="100" min="100" max="1000" class="bg-gray-700 text-white mb-4 p-2 rounded">
+                    <button id="buyButton" class="bg-green-600 px-3 py-1 rounded">Buy/Short</button>
+                    <button id="sellButton" class="bg-red-600 px-3 py-1 rounded">Sell/Cover</button>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+    const initialDataPoints = 20;
+    let balance = 10000;
+    let inPosition = false;
+    let positionType = '';
+    let entryPrice = 0;
+    let positionShares = 0;
+    const chartData = {
+        labels: Array.from({ length: initialDataPoints }, (_, i) => `Point ${i++}`),
+        datasets: [{
+            label: 'BTC/USDT',
+            backgroundColor: 'rgba(255, 99, 132, 0.2)',
+            borderColor: 'rgba(99, 255, 132, 1)',
+            data: Array.from({ length: initialDataPoints }, () => Math.floor(Math.random() * 5000 + 30000)),
+        }]
+    };
+
+    const ctx = document.getElementById('tradingChart').getContext('2d');
+    const tradingChart = new Chart(ctx, {
+        type: 'line',
+        data: chartData,
+        options: { scales: { y: { beginAtZero: false } } }
+    });
+
+    function displayDeal(type, shares, entry) {
+        document.getElementById('dealType').textContent = type;
+        document.getElementById('dealShares').textContent = shares;
+        document.getElementById('entryPrice').textContent = `$${entry.toFixed(2)}`;
+        document.getElementById('positionValue').textContent = `$${(shares * entry).toFixed(2)}`;
+        document.getElementById('dealDisplay').classList.remove('hidden');
+    }
+
+    function closeDeal() {
+        document.getElementById('dealDisplay').classList.add('hidden');
+        document.getElementById('sellButton').disabled = false;
+        document.getElementById('buyButton').textContent = 'Buy/Short';
+        inPosition = false;
+    }
+
+    function updateBalance(priceChange) {
+        if (positionType === 'buy') {
+            balance += priceChange * positionShares; // Profit from long position
+        } else {
+            balance -= (priceChange * positionShares)  // Profit from short position
+        }
+        document.getElementById('balanceAmount').textContent = `$${balance.toFixed(2)}`;
+    }
+
+    function tradeAction(actionType) {
+        const currentPrice = tradingChart.data.datasets[0].data[tradingChart.data.datasets[0].data.length - 1];
+        const shares = parseInt(document.getElementById('shareVolume').value, 10);
+
+        if (!inPosition) {
+            // Enter position
+            inPosition = true;
+            positionType = actionType; // 'long' or 'short'
+            entryPrice = currentPrice;
+            positionShares = shares;
+            document.getElementById('buyButton').disabled = false;
+            document.getElementById('sellButton').disabled = false;
+            document.getElementById(positionType + 'Button').textContent = 'Exit ' + positionType.charAt(0).toUpperCase() + positionType.slice(1);
+            displayDeal(positionType, shares, entryPrice);
+        } else {
+            // Close position
+            const priceChange = currentPrice - entryPrice;
+            if (positionType === 'long') {
+                balance += priceChange * positionShares; // Profit or loss for long position
+            } else {
+                balance -= (priceChange * positionShares) ; // Profit or loss for short position
+            }
+            document.getElementById('balanceAmount').textContent = `$${balance.toFixed(2)}`;
+            closeDeal();
+            document.getElementById('buyButton').disabled = false;
+            document.getElementById('sellButton').disabled = false;
+        }
+    }
+
+
+    function updateChart(action) {
+        const shareVolume = document.getElementById('shareVolume').value / 100; // 1x for 100 shares, 10x for 1000 shares
+        for (let i = 1; i <= 10; i++) {
+            setTimeout(() => {
+                const change = Math.floor((Math.random() * 1000 - 500) * shareVolume);
+                const newPoint = tradingChart.data.datasets[0].data[tradingChart.data.datasets[0].data.length - 1] + change;
+                tradingChart.data.labels.shift();
+                tradingChart.data.labels.push(`Point ${tradingChart.data.labels.length + 1}`);
+
+                tradingChart.data.datasets[0].data.shift();
+
+                balance += change; // Balance changes by the shareVolume factor
+                document.getElementById('balanceAmount').textContent = `$${balance.toFixed(2)}`;
+                tradingChart.update();
+                tradingChart.data.datasets[0].data.push(newPoint);
+                if (i === 10) {
+                    const profit = balance - 10000;
+                    alert(`After 10 ticks, your ${action} resulted in a ${profit >= 0 ? 'profit' : 'loss'} of $${Math.abs(profit).toFixed(2)}`);
+                }
+            }, i * 1000);
+        }
+    }
+
+
+    document.getElementById('buyButton').addEventListener('click', () => {
+        if (!inPosition) {
+            tradeAction('long');
+            updateChart('long');
+        } else if (positionType === 'long') {
+            updateChart('long');
+        }
+    });
+
+    document.getElementById('sellButton').addEventListener('click', () => {
+        if (!inPosition) {
+            tradeAction('sell');
+            updateChart('sell');
+        } else if (positionType === 'short') {
+            updateChart('sell');
+        }
+    });
+
+
+
+
+    document.getElementById('buyButton').addEventListener('click', () => updateChart('buy'));
+    document.getElementById('sellButton').addEventListener('click', () => updateChart('sell'));
+    const currentPrice = tradingChart.data.datasets[0].data[tradingChart.data.datasets[0].data.length - 1];
+    const priceChange = currentPrice - entryPrice;
+    updateBalance(priceChange);
+    closeDeal();
+
+</script>
+</body>
+</html>
